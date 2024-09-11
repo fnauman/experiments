@@ -1,5 +1,7 @@
 # experiments
-Random experiments and prototypes, mostly AI models
+Random experiments and prototypes - mostly LLMs, VLMs, diffusion models.
+
+**Note**: The repo was public previously, but I accidentally leaked one of my API keys and received a warning from github. I had to clean the history - thus this new repo has no commit history!
 
 ## Structured Outputs 
 
