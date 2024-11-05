@@ -1,5 +1,5 @@
-# Instructor does not seem to support hugginface transformer models hosted locally
-# Outlines, in contrast, does!
+# Instructor does not seem to support huggingface transformer models hosted locally
+# Use outlines instead:
 # pip install outlines
 
 import torch
