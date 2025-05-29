@@ -1,3 +1,6 @@
+# GPT-4o-2024-08-06: $0.000638 per image
+# GPT-4.1: $0.00051 per image
+# o4-mini: $0.000485 per image
 import os
 import base64
 from PIL import Image
@@ -7,6 +10,7 @@ from dotenv import load_dotenv
 from enum import Enum
 from pydantic import BaseModel, Field
 from typing import List
+import json
 
 # Load environment variables
 load_dotenv("../.env")
@@ -123,7 +127,7 @@ For price: Estimate the price range based on visible quality indicators like fab
                         "type": "image_url",
                         "image_url": {
                             "url": f"data:image/jpeg;base64,{base64_image}",
-                            "detail": "auto"  # Use high detail for better analysis
+                            "detail": "auto"  # Use auto detail for balanced cost/quality
                         }
                     }
                 ]
@@ -167,7 +171,7 @@ For price: Estimate the price range based on visible quality indicators like fab
                         "type": "image_url",
                         "image_url": {
                             "url": f"data:image/jpeg;base64,{base64_image}",
-                            "detail": "high"
+                            "detail": "auto"
                         }
                     }
                 ]
@@ -192,8 +196,8 @@ For price: Estimate the price range based on visible quality indicators like fab
                         "trend": {
                             "type": "string", 
                             "enum": [
-                                "athletic/sporty", "casual", "formal", "streetwear",
-                                "vintage", "classic", "ethnic/traditional"
+                                "athletic", "casual", "formal", "streetwear",
+                                "vintage", "classic", "traditional"
                             ]
                         },
                         "category": {
@@ -222,28 +226,36 @@ if __name__ == "__main__":
     # Replace with your image path
     image_path = "../clip/sample/test1.jpg"
     
-    try:
-        print("Analyzing garment using Pydantic structured outputs...")
-        result = analyze_garment_image(image_path)
-        
-        print("\n=== GARMENT ANALYSIS RESULTS ===")
-        print(f"Color: {result.color}")
-        print(f"Trend: {result.trend}")
-        print(f"Category: {result.category}")
-        print(f"Price: {result.price}")
-        
-        print("\n=== JSON OUTPUT ===")
-        print(result.model_dump_json(indent=2))
-        
-        print("\n" + "="*50)
-        print("Testing alternative JSON schema approach...")
-        
-        result_json = analyze_garment_image_with_json_schema(image_path)
-        print("\n=== JSON SCHEMA RESULTS ===")
-        print(result_json)
-        
-    except Exception as e:
-        print(f"Error analyzing image: {e}")
-        print("Make sure you have set OPENAI_API_KEY in your .env file")
-        print("and that the image path is correct.") 
+    if os.path.exists(image_path):
+        try:
+            print("=" * 50)
+            print("GARMENT ANALYSIS WITH STRUCTURED OUTPUTS")
+            print("=" * 50)
+            
+            result = analyze_garment_image(image_path)
+            
+            print("\n=== GARMENT ANALYSIS RESULTS ===")
+            print(f"Color: {result.color}")
+            print(f"Trend: {result.trend}")
+            print(f"Category: {result.category}")
+            print(f"Price: {result.price}")
+            
+            print("\n=== JSON OUTPUT ===")
+            print(result.model_dump_json(indent=2))
+            
+            print("\n=== ALTERNATIVE JSON SCHEMA APPROACH ===")
+            json_result = analyze_garment_image_with_json_schema(image_path)
+            print(json.dumps(json_result, indent=2))
+            
+            print("\n" + "=" * 50)
+            print("💡 For cost analysis, run: python cost_calculator.py")
+            print("=" * 50)
+            
+        except Exception as e:
+            print(f"Error analyzing image: {e}")
+            print("Make sure you have set OPENAI_API_KEY in your .env file")
+    else:
+        print(f"\nImage file not found: {image_path}")
+        print("Please update the image_path variable with a valid image file.")
+        print("\n💡 For cost analysis, run: python cost_calculator.py") 
     
