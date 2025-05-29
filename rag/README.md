@@ -22,20 +22,6 @@
 - [`transformers` cookbook](https://huggingface.co/learn/cookbook/en/advanced_rag)
 - [More resources at `langchain` cookbook](https://github.com/langchain-ai/langchain/tree/master/cookbook)
 
-## Granular embeddings
-
-[ColBERT](https://til.simonwillison.net/llms/colbert-ragatouille?s=31)
-
-## Document parsing
-
-- Comparison: [Twitter thread](https://twitter.com/giannis2two/status/1775208991905243499), [Notebook](./Advanced_Document_Parsing_For_Enterprises.ipynb).
-- [Langchain](https://github.com/langchain-ai/langchain-extract)
-- [LlamaParse](https://github.com/run-llama/llama_parse)
-
-## Evaluation
-
-- [RAGAS - Visualization](https://towardsdatascience.com/visualize-your-rag-data-evaluate-your-retrieval-augmented-generation-system-with-ragas-fc2486308557)
-
 ## Computationally efficient RAG
 
 - [Embedding quantization @ huggingface](https://huggingface.co/blog/embedding-quantization)
