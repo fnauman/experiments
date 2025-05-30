@@ -3,7 +3,7 @@ garment_analyzer_strict.py – Vision classification with OpenAI Structured Outp
 Requires: openai>=1.16.0, pydantic>=2.7, pillow, python-dotenv
 
 Usage:
-    python garment_analyzer_strict.py path/to/image1.jpg path/to/image2.png
+    python garment_analyzer_strict.py /home/nauman/data/wargon/test_images/test1.jpg /home/nauman/data/wargon/test_images/test2.jpg
 """
 from __future__ import annotations
 

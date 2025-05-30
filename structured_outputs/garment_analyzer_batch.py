@@ -1,129 +1,121 @@
+#!/usr/bin/env python
 """
-garment_analyzer_batch.py – Batch runner that stores classification results in a pandas DataFrame
-==============================================================================================
+garment_batch_job.py – submit a vision-classification Batch job
 
-This script wraps **garment_analyzer_strict.py** and adds :
-
-* directory traversal (optionally recursive) so you can pass whole folders;
-* collection of every successful response into a pandas **DataFrame**;
-* auto‑save of that DataFrame to CSV / Parquet.
-
-────────────────────────── Example CLI invocations ──────────────────────────
-
-1. Single image
-   -------------
-
-    python garment_analyzer_strict.py data/images/folder1/test1.jpg
-
-   (This is exactly the same as before – you still get JSON in stdout.)
-
-2. Many images / folders with a DataFrame output
-   ---------------------------------------------
-
-    # Non‑recursive – only top‑level files in the two folders
-    python garment_analyzer_batch.py data/images/folder1 data/images/folder2 \
-        --output labels.csv
-
-    # Recursive walk through *one* directory tree, saving to Parquet
-    python garment_analyzer_batch.py data/images/folder1 -r -o labels.parquet
-
-The resulting file contains columns:  `image`, `color`, `trend`, `category`,
-`price`  (plus an `error` column if any files failed).
+Usage:
+    python garment_batch_job.py /home/nauman/data/wargon/test_images/ 
 """
 from __future__ import annotations
 
 import argparse
-import asyncio
-import os
-import sys
+import json
 from pathlib import Path
-from typing import Iterable, List
 
-import pandas as pd
 from dotenv import load_dotenv
-from openai import OpenAIError
-from pydantic import ValidationError
+from openai import OpenAI, OpenAIError
 
-# We import our strict analyser helpers (async) from the sibling module
-import garment_analyzer_strict as ga
+# --- reuse the “strict” script so the prompt & helpers stay in one place ----------
+from garment_analyzer_strict import (
+    SYSTEM_PROMPT,               # full controlled-vocabulary prompt  :contentReference[oaicite:0]{index=0}
+    image_to_base64,             # down-size & encode helper          :contentReference[oaicite:1]{index=1}
+)
+# -------------------------------------------------------------------------------
 
-load_dotenv()
+load_dotenv("/home/nauman/.env")                    # so OPENAI_API_KEY is picked up by the SDK
+client = OpenAI()                # ← synchronous client is fine for Batch
 
-# ─────────────────────────────── helper utils ──────────────────────────────
-
-VALID_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"}
-
-
-def iter_image_paths(inputs: Iterable[Path], recursive: bool) -> List[Path]:
-    """Yield unique, sorted image paths from files / directories given on CLI."""
-    seen = set()
-    images: List[Path] = []
-    for p in inputs:
-        if p.is_dir():
-            glob_pattern = "**/*" if recursive else "*"
-            for file in p.glob(glob_pattern):
-                if file.suffix.lower() in VALID_EXTS and file not in seen:
-                    images.append(file)
-                    seen.add(file)
-        elif p.is_file() and p.suffix.lower() in VALID_EXTS:
-            if p not in seen:
-                images.append(p)
-                seen.add(p)
-    return sorted(images)
+MODEL          = "gpt-4o-2024-08-06"   # keep in sync with garment_analyzer_strict.py
+TEMPERATURE    = 0
+IMAGE_DETAIL   = "auto"
+MAX_TOKENS     = 256
+OUTFILE        = Path("garment_batch_tasks.jsonl")
 
 
-async def analyse_to_records(paths: List[Path]):
-    """Return a list of dicts suitable for a pandas DataFrame."""
-    records = []
+def build_tasks(image_dir: Path) -> list[dict]:
+    """Create one Batch-API task per image (Base64 inlined)."""
+    img_paths = sorted(
+        p for p in image_dir.iterdir()
+        if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+    )
+    tasks: list[dict] = []
 
-    async def _analyse(path: Path):
-        try:
-            b64 = ga.image_to_base64(path)
-            parsed = await ga._call_openai(b64)  # type: ignore (private helper is fine here)
-            records.append({"image": str(path), **parsed.model_dump()})
-        except (OpenAIError, ValidationError) as err:
-            # Store the error alongside the image so we can inspect later
-            records.append({"image": str(path), "error": str(err)})
+    for idx, path in enumerate(img_paths):
+        b64 = image_to_base64(path)                # identical resize/quality path
+        task = {
+            "custom_id": path.stem,
+            "method": "POST",
+            "url": "/v1/chat/completions",
+            "body": {
+                "model": MODEL,
+                "temperature": TEMPERATURE,
+                "max_tokens": MAX_TOKENS,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Analyse this garment."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{b64}",
+                                    "detail": IMAGE_DETAIL,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        }
+        tasks.append(task)
 
-    await asyncio.gather(*[_analyse(p) for p in paths])
-    return records
+    # --- sanity check ----------------------------------------------------------
+    if len(tasks) != len(img_paths):           # should never happen, but be safe
+        raise RuntimeError(
+            f"Found {len(img_paths)} images but built {len(tasks)} tasks."
+        )
+    return tasks
 
 
-# ──────────────────────────────── main routine ─────────────────────────────
+def write_jsonl(tasks: list[dict], outfile: Path) -> None:
+    with outfile.open("w") as f:
+        for obj in tasks:
+            f.write(json.dumps(obj) + "\n")
+
+
+def submit_batch(jsonl_file: Path, window: str):
+    """Upload JSONL & create Batch job."""
+    try:
+        batch_file = client.files.create(file=jsonl_file.open("rb"), purpose="batch")
+        print(f"📤  Uploaded tasks file – id: {batch_file.id}")
+
+        job = client.batches.create(
+            input_file_id=batch_file.id,
+            endpoint="/v1/chat/completions",
+            completion_window=window, 
+        )
+        print("🚀  Batch job submitted successfully!\n")
+        print(job)                              # prints id, status, etc.
+    except OpenAIError as err:
+        print(f"❌  Batch submission failed: {err}")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Classify garment images in bulk and save results to a DataFrame.")
-    parser.add_argument("inputs", nargs="+", type=Path,
-                        help="Paths to image files or directories containing images")
-    parser.add_argument("-r", "--recursive", action="store_true",
-                        help="Recursively search directories for images")
-    parser.add_argument("-o", "--output", default="labels.csv",
-                        help="Output file name (extension .csv or .parquet determines format)")
-
+        description="Create and submit a Batch job for garment vision analysis."
+    )
+    parser.add_argument("folder", type=Path, help="Folder with images to classify")
+    parser.add_argument(
+        "--window", default="24h", help="Batch completion window (e.g. 1h, 24h)"
+    )
     args = parser.parse_args()
 
-    # Resolve paths and gather images
-    img_paths = iter_image_paths(args.inputs, args.recursive)
-    if not img_paths:
-        sys.exit("❌ No images found matching the provided inputs.")
+    tasks = build_tasks(args.folder)
+    write_jsonl(tasks, OUTFILE)
+    print(f"📝  Wrote {len(tasks)} tasks to {OUTFILE}")
 
-    print(f"🔎 Found {len(img_paths)} image(s). Submitting to OpenAI…")
-
-    # Run analysis concurrently
-    records = asyncio.run(analyse_to_records(img_paths))
-
-    # Convert to DataFrame
-    df = pd.DataFrame.from_records(records)
-    print("\n📊 DataFrame preview:\n", df.head())
-
-    # Persist to disk
-    out_path = Path(args.output)
-    if out_path.suffix.lower() == ".parquet":
-        df.to_parquet(out_path, index=False)
-    else:
-        df.to_csv(out_path, index=False)
-    print(f"\n✅ Saved {len(df)} rows to {out_path.resolve()}")
+    submit_batch(OUTFILE, args.window)
 
 
 if __name__ == "__main__":

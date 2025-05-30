@@ -4,15 +4,15 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from enum import Enum
-# from typing import Iterable, Literal, Optional, List
 from pydantic import BaseModel, Field
 import instructor
 
 
-load_dotenv() # OPENROUTER_API_KEY is stored in .env file
+load_dotenv("/home/nauman/.env") # OPENROUTER_API_KEY is stored in .env file
 
-
-MODEL = "mistralai/pixtral-12b:free"
+MODEL = "google/gemini-2.5-flash-preview-05-20"
+# Path to your image
+IMAGE_PATH = "/home/nauman/repos/private/clip_cisutac/sample/test1.jpg"
 
 # Gets API Key from environment variable OPENAI_API_KEY
 client = OpenAI(
@@ -21,15 +21,13 @@ client = OpenAI(
 )
 
 #  Function to encode the image
-def encode_image(image_path):
-  with open(image_path, "rb") as image_file:
+def encode_image(IMAGE_PATH):
+  with open(IMAGE_PATH, "rb") as image_file:
     return base64.b64encode(image_file.read()).decode('utf-8')
 
-# Path to your image
-image_path = "/home/nauman/front_2023_03_23_14_49_40.jpg"
 
 # Getting the base64 string
-base64_image = encode_image(image_path)
+base64_image = encode_image(IMAGE_PATH)
 
 
 # Define the schema for the input data
