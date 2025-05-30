@@ -24,7 +24,7 @@ from PIL import Image
 # ─────────────────────────────────────── configuration ──
 load_dotenv("/home/nauman/.env")
 API_KEY = os.getenv("OPENAI_API_KEY")
-MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4.1")  # vision-enabled model (e.g. gpt-4.1, gpt-4o-mini)
+MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-2024-08-06")  # vision-enabled model (e.g. gpt-4.1, gpt-4o-mini)
 TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", 0))  # deterministic classification
 IMAGE_DETAIL = os.getenv("OPENAI_IMAGE_DETAIL", "auto")   # "low"|"auto"|"high"
 MAX_TOKENS = 256
@@ -85,17 +85,13 @@ def image_to_base64(path: Path, max_side: int = 512, quality: int = 88) -> str:
 
 async def _call_openai(b64: str) -> GarmentAnalysis:
     """Single request to OpenAI with strict JSON‑schema output."""
-    schema = GarmentAnalysis.model_json_schema(ref_template="#/$defs/{model}")
+    # schema = GarmentAnalysis.model_json_schema(ref_template="#/$defs/{model}")
 
-    response = await client.chat.completions.create(
+    response = await client.beta.chat.completions.parse(
         model=MODEL,
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        response_format={
-            "type": "json_schema",
-            "json_schema": schema,
-            "strict": True  # <-- guarantees on‑schema output
-        },
+        response_format=GarmentAnalysis, 
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -114,7 +110,7 @@ async def _call_openai(b64: str) -> GarmentAnalysis:
         ],
     )
 
-    return GarmentAnalysis.model_validate_json(response.choices[0].message.content)
+    return response.choices[0].message.parsed
 
 async def analyse_paths(paths: Iterable[Path]) -> None:
     """Analyse many images concurrently and pretty‑print results."""
