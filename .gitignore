@@ -170,3 +170,4 @@ llamaindex/wandb/
 llamaindex/artifacts/
 
 logs/
+*.jsonl
